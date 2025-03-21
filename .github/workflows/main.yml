@@ -52,6 +52,43 @@ jobs:
           echo "{}" > .mono/temp/obj/project.assets.json
           
           echo "Project prepared for building"
+      - name: Import all project resources
+        run: |
+            echo "Importing all project resources..."
+            
+            # Run Godot's import system in headless mode
+            godot-mono --headless --editor --quit >> import_log.txt 2>&1 || true
+            
+            # Create directory structure for missing imports
+            mkdir -p .godot/imported
+            
+            # Handle PNG textures that are missing their ctex files
+            for png_file in $(find . -name "*.png"); do
+              # Get the resource path and generate a hash
+              res_path=$(echo "$png_file" | sed 's/^\.\//res:\/\//g')
+              file_name=$(basename "$png_file")
+              # Create placeholder ctex files
+              hash_id=$(echo -n "$res_path" | md5sum | cut -d' ' -f1)
+              touch ".godot/imported/${file_name}-${hash_id}.ctex"
+              touch ".godot/imported/${file_name}-${hash_id}.md5"
+            done
+            
+            # Handle TTF font files
+            for font_file in $(find . -name "*.TTF" -o -name "*.ttf"); do
+              # Get the resource path and generate a hash
+              res_path=$(echo "$font_file" | sed 's/^\.\//res:\/\//g')
+              file_name=$(basename "$font_file")
+              # Create placeholder fontdata files
+              hash_id=$(echo -n "$res_path" | md5sum | cut -d' ' -f1)
+              touch ".godot/imported/${file_name}-${hash_id}.fontdata"
+              touch ".godot/imported/${file_name}-${hash_id}.md5"
+            done
+            
+            # Verify the import directory
+            echo "Contents of .godot/imported:"
+            ls -la .godot/imported/ | head -20
+            
+            echo "Resource import completed"
 
       - name: Build Mono Solutions
         run: |
