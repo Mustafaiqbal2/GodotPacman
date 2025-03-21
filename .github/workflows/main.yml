@@ -22,6 +22,11 @@ jobs:
           echo "Detected Godot version: $GODOT_FULL_VERSION (using $GODOT_VERSION for templates)"
           echo "godot_version=$GODOT_VERSION" >> $GITHUB_ENV
           echo "godot_full_version=$GODOT_FULL_VERSION" >> $GITHUB_ENV
+
+      - name: Build Mono Solutions
+        run: |
+          echo "Building Mono solutions..."
+          godot --build-solutions
         
       - name: Download and install templates
         run: |
