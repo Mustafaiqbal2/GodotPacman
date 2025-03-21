@@ -284,7 +284,30 @@ jobs:
           
           echo "Current directory content:"
           ls -la
-          
+      - name: Download iOS template specifically
+        run: |
+            echo "Downloading iOS template directly..."
+            
+            # Create template directory specifically for iOS
+            mkdir -p ~/Library/Application\ Support/Godot/export_templates/4.4.stable.mono
+            
+            # Download iOS template directly
+            curl -L "https://github.com/godotengine/godot-builds/releases/download/4.4-stable/Godot_v4.4-stable_mono_export_templates.tpz" -o templates.tpz
+            
+            # Extract iOS template from the archive
+            mkdir -p temp_extract
+            unzip -j templates.tpz "*ios*" -d temp_extract
+            
+            # Copy to proper location
+            if [ -f "temp_extract/ios.zip" ]; then
+              cp temp_extract/ios.zip ~/Library/Application\ Support/Godot/export_templates/4.4.stable.mono/
+              echo "iOS template copied to export templates directory"
+            else
+              echo "iOS template not found in archive"
+            fi
+            
+            # Verify
+            ls -la ~/Library/Application\ Support/Godot/export_templates/4.4.stable.mono/
       - name: Export iOS XCArchive
         run: |
           mkdir -p build/ios
