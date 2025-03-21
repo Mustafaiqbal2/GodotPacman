@@ -117,54 +117,40 @@ jobs:
               
               echo "Modified export_presets.cfg:"
               cat export_presets.cfg
-      - name: Export iOS XCArchive without signing
+      - name: Export iOS XCArchive properly
         run: |
                 mkdir -p build/ios
                 
-                echo "Trying project-only export mode first..."
-                godot-mono --headless --verbose --export-debug "iOS" "build/ios/GodotPacman.xcarchive" || true
+                # Modify export_presets.cfg to export without signing but create full structure
+                sed -i '' 's/application\/export_project_only=.*/application\/export_project_only=false/' export_presets.cfg
                 
-                # If that doesn't work, try via PCK
-                if [ ! -d "build/ios/GodotPacman.xcarchive" ]; then
-                  echo "Direct export failed - trying PCK export..."
-                  
-                  # First get the PCK
-                  godot-mono --headless --verbose --export-pack "iOS" "build/ios/GodotPacman.pck" || true
-                  
-                  if [ -f "build/ios/GodotPacman.pck" ]; then
-                    echo "PCK export succeeded, now creating placeholder XCArchive..."
-                    
-                    # Create a minimal XCArchive structure for later manual signing
-                    mkdir -p build/ios/GodotPacman.xcarchive/Products/Applications/GodotPacman.app
-                    cp build/ios/GodotPacman.pck build/ios/GodotPacman.xcarchive/Products/Applications/GodotPacman.app/
-                    
-                    # Create a minimal Info.plist
-                    cat > build/ios/GodotPacman.xcarchive/Products/Applications/GodotPacman.app/Info.plist << EOF
-                <?xml version="1.0" encoding="UTF-8"?>
-                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-                <plist version="1.0">
-                <dict>
-                    <key>CFBundleIdentifier</key>
-                    <string>com.godot.iostemplate</string>
-                    <key>CFBundleName</key>
-                    <string>GodotPacman</string>
-                    <key>CFBundleVersion</key>
-                    <string>1.0</string>
-                </dict>
-                </plist>
+                # We WANT Godot to create a complete XCArchive with binary
+                godot-mono --headless --verbose --export-debug "iOS" "build/ios/GodotPacman.xcarchive"
+                
+                # Check results
+                ls -la build/ios/GodotPacman.xcarchive || echo "XCArchive export failed"
+                
+                # Create instructions for the client
+                cat > build/ios/SIGNING_INSTRUCTIONS.txt << 'EOF'
+                iOS App Store Submission Instructions:
+                
+                1. You will need:
+                  - Apple Developer Account ($99/year)
+                  - Mac with Xcode
+                  - Your app-specific Bundle ID registered in App Store Connect
+                
+                2. Prepare for signing:
+                  - Open the XCArchive in Xcode Organizer
+                  - Use the "Distribute App" option
+                  - Select "App Store Connect" distribution
+                  - Follow Xcode prompts to sign the app with your credentials
+                  - Replace the bundle ID "com.godot.iostemplate" with your registered App ID
+                
+                3. Complete App Store Connect setup:
+                  - Create a new app in App Store Connect
+                  - Upload screenshots, descriptions, and metadata
+                  - Submit the signed IPA that Xcode generates
                 EOF
-                    
-                    echo "Created placeholder XCArchive structure"
-                  fi
-                fi
-                
-                # Check if XCArchive was created
-                if [ -d "build/ios/GodotPacman.xcarchive" ]; then
-                  echo "XCArchive export succeeded (or placeholder created)!"
-                else
-                  echo "Failed to create XCArchive."
-                fi
-          
       - name: Generate IPA from XCArchive
         run: |
           if [ -d "build/ios/GodotPacman.xcarchive" ]; then
