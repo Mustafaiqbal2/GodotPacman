@@ -52,223 +52,7 @@ jobs:
           echo "{}" > .mono/temp/obj/project.assets.json
           
           echo "Project prepared for building"
-      - name: Import all project resources
-        run: |
-            echo "Importing all project resources..."
-            
-            # Run Godot's import system in headless mode
-            godot-mono --headless --editor --quit >> import_log.txt 2>&1 || true
-            
-            # Create directory structure for missing imports
-            mkdir -p .godot/imported
-            
-            # Handle PNG textures that are missing their ctex files
-            for png_file in $(find . -name "*.png"); do
-              # Get the resource path and generate a hash
-              res_path=$(echo "$png_file" | sed 's/^\.\//res:\/\//g')
-              file_name=$(basename "$png_file")
-              # Create placeholder ctex files
-              hash_id=$(echo -n "$res_path" | md5sum | cut -d' ' -f1)
-              touch ".godot/imported/${file_name}-${hash_id}.ctex"
-              touch ".godot/imported/${file_name}-${hash_id}.md5"
-            done
-            
-            # Handle TTF font files
-            for font_file in $(find . -name "*.TTF" -o -name "*.ttf"); do
-              # Get the resource path and generate a hash
-              res_path=$(echo "$font_file" | sed 's/^\.\//res:\/\//g')
-              file_name=$(basename "$font_file")
-              # Create placeholder fontdata files
-              hash_id=$(echo -n "$res_path" | md5sum | cut -d' ' -f1)
-              touch ".godot/imported/${file_name}-${hash_id}.fontdata"
-              touch ".godot/imported/${file_name}-${hash_id}.md5"
-            done
-            
-            # Verify the import directory
-            echo "Contents of .godot/imported:"
-            ls -la .godot/imported/ | head -20
-            
-            echo "Resource import completed"
-
-      - name: Build Mono Solutions
-        run: |
-          echo "Building Mono solutions with proper options..."
-          
-          # Skip actual build but complete successfully
-          # This avoids the hanging issue while letting the workflow continue
-          godot-mono --headless --quit || true
-          
-          # Create indication files to make export think C# build succeeded
-          mkdir -p .mono/assemblies/Debug
-          touch .mono/assemblies/Debug/build_complete
-          
-          echo "Mono build preparation complete"
-        
-
-      - name: Download and install templates
-        run: |
-          # Define all possible template directories
-          TEMPLATE_DIRS=(
-            "~/.local/share/godot/export_templates/${godot_version}.stable"
-            "~/Library/Application Support/Godot/export_templates/${godot_version}.stable"
-            "~/Library/Application Support/Godot/export_templates/${godot_full_version}"
-          )
-          
-          # Create all template directories
-          for DIR in "${TEMPLATE_DIRS[@]}"; do
-            DIR=$(eval echo "$DIR")
-            echo "Creating template directory: $DIR"
-            mkdir -p "$DIR"
-          done
-          
-          # Try multiple template sources and formats
-          TEMPLATE_URLS=(
-            "https://github.com/godotengine/godot/releases/download/${godot_version}-stable/Godot_v${godot_version}-stable_export_templates.tpz"
-            "https://github.com/godotengine/godot/releases/download/${godot_version}.0-stable/Godot_v${godot_version}.0-stable_export_templates.tpz"
-            "https://downloads.tuxfamily.org/godotengine/${godot_version}/Godot_v${godot_version}-stable_export_templates.tpz"
-            "https://github.com/godotengine/godot-builds/releases/download/4.2.2-stable/Godot_v4.2.2-stable_export_templates.tpz"
-          )
-          
-          # Try downloading templates
-          for URL in "${TEMPLATE_URLS[@]}"; do
-            echo "Trying to download templates from: $URL"
-            if curl -L --connect-timeout 30 --retry 3 --retry-delay 5 "$URL" -o templates.tpz; then
-              # Check if it's a valid zip file
-              if unzip -t templates.tpz > /dev/null 2>&1; then
-                echo "Successfully downloaded templates from $URL"
-                break
-              else
-                echo "Downloaded file is not a valid zip archive, trying next source..."
-                rm templates.tpz
-              fi
-            else
-              echo "Failed to download from $URL, trying next source..."
-            fi
-          done
-          
-          # Final check and installation
-          if [ -f templates.tpz ] && unzip -t templates.tpz > /dev/null 2>&1; then
-            echo "Installing templates..."
-            unzip -o templates.tpz -d .
-            
-            # Copy templates to all possible locations
-            for DIR in "${TEMPLATE_DIRS[@]}"; do
-              DIR=$(eval echo "$DIR")
-              echo "Installing templates to: $DIR"
-              
-              # Copy from templates directory if it exists
-              if [ -d "templates" ]; then
-                cp -r templates/* "$DIR/"
-                
-                # Directly extract ios.zip from templates if needed
-                if [ -f "templates/ios.zip" ]; then
-                  echo "Found ios.zip in templates directory"
-                  cp templates/ios.zip "$DIR/"
-                fi
-              fi
-              
-              # Also copy loose files in case templates directory doesn't exist
-              cp -f *.zip "$DIR/" 2>/dev/null || true
-              cp -f *.tpz "$DIR/" 2>/dev/null || true
-            done
-            
-            # List directory contents
-            for DIR in "${TEMPLATE_DIRS[@]}"; do
-              DIR=$(eval echo "$DIR")
-              if [ -d "$DIR" ]; then
-                echo "Contents of $DIR:"
-                ls -la "$DIR/"
-              fi
-            done
-            
-            # Try to manually extract iOS templates if they're inside another zip
-            if [ -f "templates/ios.zip" ]; then
-              for DIR in "${TEMPLATE_DIRS[@]}"; do
-                DIR=$(eval echo "$DIR")
-                cp templates/ios.zip "$DIR/" || true
-              done
-            elif [ -f "templates.tpz" ]; then
-              echo "Extracting iOS template from templates.tpz"
-              mkdir -p temp_extract
-              unzip -j templates.tpz "*ios*" -d temp_extract || true
-              if [ -f "temp_extract/ios.zip" ]; then
-                for DIR in "${TEMPLATE_DIRS[@]}"; do
-                  DIR=$(eval echo "$DIR")
-                  cp temp_extract/ios.zip "$DIR/" || true
-                done
-              fi
-              rm -rf temp_extract
-            fi
-            
-            # Debug - List all template directories
-            echo "Template directories contents:"
-            for DIR in "${TEMPLATE_DIRS[@]}"; do
-              DIR=$(eval echo "$DIR")
-              echo "Contents of $DIR:"
-              ls -la "$DIR/" || true
-            done
-          else
-            echo "Failed to obtain valid export templates after multiple attempts."
-            exit 1
-          fi
       
-      - name: Create export_presets.cfg if missing
-        run: |
-          if [ ! -f export_presets.cfg ]; then
-            echo "Creating minimal export_presets.cfg for iOS"
-            cat > export_presets.cfg << 'EOFMARKER'
-          [preset.0]
-          
-          name="iOS"
-          platform="iOS"
-          runnable=true
-          dedicated_server=false
-          custom_features=""
-          export_filter="all_resources"
-          include_filter=""
-          exclude_filter=""
-          export_path="build/ios/GodotPacman.xcarchive"
-          encryption_include_filters=""
-          encryption_exclude_filters=""
-          encrypt_pck=false
-          encrypt_directory=false
-          
-          [preset.0.options]
-          
-          custom_template/debug=""
-          custom_template/release=""
-          application/app_store_team_id="12345678AB"  # Dummy ID to pass validation
-          application/provisioning_profile_uuid_debug=""
-          application/code_sign_identity_debug=""
-          application/export_method_debug=1  # Set to development
-          application/provisioning_profile_uuid_release=""
-          application/code_sign_identity_release=""
-          application/export_method_release=0
-          application/targeted_device_family=2
-          application/bundle_identifier="com.yourusername.godotpacman"
-          application/signature=""
-          application/short_version="1.0"
-          application/version="1.0"
-          application/icon_76x76=""
-          application/icon_152x152=""
-          application/icon_1024x1024=""
-          capabilities/access_wifi=false
-          capabilities/push_notifications=false
-          user_data/accessible_from_files_app=false
-          user_data/accessible_from_itunes_sharing=false
-          privacy/camera_usage_description=""
-          privacy/microphone_usage_description=""
-          privacy/photolibrary_usage_description=""
-          orientation/portrait=true
-          orientation/landscape_left=false
-          orientation/landscape_right=false
-          orientation/portrait_upside_down=false
-          EOFMARKER
-            echo "Created export_presets.cfg file"
-          else
-            echo "export_presets.cfg already exists"
-          fi
-          cat export_presets.cfg
           
       - name: Godot export debug info
         run: |
@@ -308,67 +92,36 @@ jobs:
             
             # Verify
             ls -la ~/Library/Application\ Support/Godot/export_templates/4.4.stable.mono/
-      - name: Export iOS XCArchive
+      - name: Export iOS XCArchive with debug
         run: |
-          mkdir -p build/ios
-          echo "Exporting XCArchive using --export-debug..."
-          # Try export with fallbacks for different Godot versions and parameters
-          export_success=false
-          
-          # Try with explicit path and export-debug
-          echo "Trying export-debug..."
-          godot-mono --headless --export-debug "iOS" "build/ios/GodotPacman.xcarchive" && export_success=true
-          
-          # If that failed, try with plain export
-          if [ "$export_success" = false ]; then
-            echo "export-debug failed, trying with plain export..."
-            godot-mono --headless --export "iOS" "build/ios/GodotPacman.xcarchive" && export_success=true
-          fi
-          
-          # If still failed, try finding a different Godot executable
-          if [ "$export_success" = false ]; then
-            echo "Trying to find alternate Godot executable..."
-            find /Applications -name "Godot*" -type d | while read godot_app; do
-              echo "Trying with $godot_app/Contents/MacOS/Godot"
-              $godot_app/Contents/MacOS/Godot --headless --export-debug "iOS" "build/ios/GodotPacman.xcarchive" && export_success=true && break
-            done
-          fi
-          
-          if [ -d "build/ios/GodotPacman.xcarchive" ]; then
-            echo "Successfully created XCArchive!"
-            # Create a README with signing instructions
-            cat > build/ios/SIGNING_INSTRUCTIONS.txt << 'EOF'
-          iOS Export - Signing Instructions
-
-          This archive contains both an XCArchive and an unsigned IPA.
-
-          To sign with your Apple Developer account:
-
-          1. Open Xcode on a Mac.
-          2. Open Window > Organizer.
-          3. Drag the GodotPacman.xcarchive into the Organizer.
-          4. Click "Distribute App".
-          5. Select "App Store Connect" or "Ad Hoc" distribution.
-          6. Follow the signing steps with your Apple Developer credentials.
-          EOF
-          else
-            echo "XCArchive export failed."
-            # Create a placeholder directory
-            mkdir -p build/ios/GodotPacman.xcarchive
-            echo "Export failed. See logs for details." > build/ios/GodotPacman.xcarchive/README.txt
-          fi
-          
-      - name: Export PCK as fallback
-        run: |
-          echo "Creating PCK export as fallback..."
-          mkdir -p build/ios
-          godot-mono --headless --export-pack "iOS" "build/ios/GodotPacman.pck" || true
-          
-          if [ -f "build/ios/GodotPacman.pck" ]; then
-            echo "PCK export succeeded!"
-            # Copy project files to allow for manual reconstruction
-            cp -r project.godot export_presets.cfg build/ios/ || true
-          fi
+              mkdir -p build/ios
+              
+              # Debug export presets first
+              echo "Checking export presets configuration..."
+              cat export_presets.cfg || echo "No export_presets.cfg found!"
+              
+              # Try export with explicit arguments and debugging
+              echo "Trying direct export with verbose mode..."
+              godot-mono --headless --verbose --export-debug "iOS" "build/ios/GodotPacman.xcarchive"
+              
+              # Check if templates are recognized
+              echo "Checking if Godot can find templates:"
+              godot-mono --headless --verbose --validate-export-presets || true
+              
+              # Try PCK export instead which is more reliable
+              echo "Trying PCK export instead..."
+              godot-mono --headless --verbose --export-pack "iOS" "build/ios/GodotPacman.pck" || true
+              
+              # Check if any files were created
+              if [ -f "build/ios/GodotPacman.pck" ]; then
+                echo "PCK export succeeded!"
+              elif [ -d "build/ios/GodotPacman.xcarchive" ]; then
+                echo "XCArchive export succeeded!"
+              else
+                echo "All export attempts failed. Creating placeholder files."
+                mkdir -p build/ios
+                echo "Export failed. See logs for details." > build/ios/export_failed.txt
+              fi
           
       - name: Generate IPA from XCArchive
         run: |
