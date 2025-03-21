@@ -206,35 +206,28 @@ jobs:
       - name: Export iOS XCArchive
         run: |
           mkdir -p build/ios
-          
-          # Export XCArchive with skip-codesign
-          echo "Exporting XCArchive with skip-codesign..."
-          godot --headless --export "iOS" --skip-codesign "build/ios/GodotPacman.xcarchive" || true
-          
-          # Check if XCArchive was created
+          echo "Exporting XCArchive using --export-debug..."
+          godot --headless --export-debug "iOS" "build/ios/GodotPacman.xcarchive" || true
           if [ -d "build/ios/GodotPacman.xcarchive" ]; then
             echo "Successfully created XCArchive!"
-            # Create a README with signing instructions
+            # Create a README with signing instructions (if needed)
             cat > build/ios/SIGNING_INSTRUCTIONS.txt << EOF
           iOS Export - Signing Instructions
-          
+
           This archive contains both an XCArchive and an unsigned IPA.
-          
+
           To sign with your Apple Developer account:
-          
-          1. Open Xcode on a Mac
-          2. Open Window > Organizer
-          3. Drag the GodotPacman.xcarchive into the Organizer
-          4. Click "Distribute App"
-          5. Select "App Store Connect" or "Ad Hoc" distribution
-          6. Follow the signing steps with your Apple Developer credentials
-          
-          The unsigned IPA is also included but is primarily for testing and cannot
-          be installed on real devices without signing.
+
+          1. Open Xcode on a Mac.
+          2. Open Window > Organizer.
+          3. Drag the GodotPacman.xcarchive into the Organizer.
+          4. Click "Distribute App".
+          5. Select "App Store Connect" or "Ad Hoc" distribution.
+          6. Follow the signing steps with your Apple Developer credentials.
           EOF
-          else
-            echo "XCArchive export failed."
-          fi
+                    else
+                      echo "XCArchive export failed."
+                    fi
           
       - name: Generate IPA from XCArchive
         run: |
