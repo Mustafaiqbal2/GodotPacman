@@ -13,6 +13,7 @@ public partial class Game : Node2D
 		Won		 = (1 << 4),  // round won (all dots eaten)
 		GameOver = (1 << 5),  // round lost and no lifes left
 		Reset    = (1 << 6),  // for freeze the game when reset is called (to avoid update actors in the first tick)
+		Instructions = (1 << 7), // Instructions screen
 	}
 
 	public enum FruitType
@@ -65,6 +66,11 @@ public partial class Game : Node2D
 	[Export]
 	private Texture2D fruitTexture;
 
+	[Export]
+	private Texture2D instructionsTexture;  // Will be loaded from "Regles2.png"
+
+	private Trigger instructionsStartedTrigger;
+	private bool firstGameStart = true;  // To only show instructions on first run
 	private Label scoreText;
 	private Label highScoreText;
 	private Sprite2D mazeSprite;
@@ -129,6 +135,11 @@ public partial class Game : Node2D
 	private int pillWidthIndex = 0;
 	private int pillHeightIndex = 0;
 	private double pillTestTimer = 0;
+
+	// Add these variables to your class
+	private bool showSplashScreen = true;
+	private float splashScreenTimer = 0f;
+	private const float SPLASH_SCREEN_DURATION = 5.0f; // 5 seconds
 
 	/* LOAD AND SAVE HIGHSCORE */
 
@@ -238,11 +249,9 @@ public partial class Game : Node2D
 	private void Reset()
 	{
 		// reset some control variables
-
 		ticks = 0;
 		level = 1;
 		score = 0;
-		SetFreezeTo(FreezeType.Reset);
 		numGhostsEaten = 0;
 		numLifes = 3;
 		numDotsEaten = 0;
@@ -251,21 +260,79 @@ public partial class Game : Node2D
 		StopSounds();
 
 		// disable triggers & reset actors and maze
-
 		ResetTriggers();
 		ResetActors();
 		Maze.Reset();
 
 		// reset maze color and show door
-
 		mazeSprite.SelfModulate = new Color("417ae2");
 		ghostDoorSprite.Visible = true;
 
-		// start ready trigger
+		// For the initial game start, show instructions using a proper scene
+		if (firstGameStart)
+		{
+			firstGameStart = false;
+			
+			// Hide game elements
+			pacman.Visible = false;
+			foreach (Ghost g in ghosts)
+			{
+				g.Visible = false;
+			}
+			
+			// Completely stop game processing
+			freeze = (int)FreezeType.Reset;
+			
+			try {
+				// Load and instance the instructions scene
+				var instructionsScene = GD.Load<PackedScene>("res://Scenes/InstructionsScreen.tscn");
+				if (instructionsScene != null)
+				{
+					// CRITICAL FIX: Add to ROOT of tree, not to Game
+					var instructionsScreen = instructionsScene.Instantiate<InstructionsScreen>();
+					
+					// Connect the signal
+					instructionsScreen.InstructionsDone += OnInstructionsCompleted;
+					
+					// Add to ROOT, bypassing the viewport constraints
+					GetTree().Root.CallDeferred("add_child", instructionsScreen);
+					GD.Print("Adding instructions to ROOT instead of Game node");
+				}
+				else
+				{
+					GD.PrintErr("Failed to load instructions scene!");
+					readyStartedTrigger.Start();
+				}
+			}
+			catch (Exception ex) {
+				GD.PrintErr("Exception loading instructions: " + ex.Message);
+				readyStartedTrigger.Start();
+			}
+			
+			// Make sure nothing else happens
+			showSplashScreen = false;
+		}
+		else
+		{
+			// For subsequent games, go directly to ready state
+			SetFreezeTo(FreezeType.Reset);
+			readyStartedTrigger.Start();
+		}
+	}
 
+	// Add this method to handle when instructions are done
+	private void OnInstructionsCompleted()
+	{
+		// Start the game
+		freeze = (int)FreezeType.None;
 		readyStartedTrigger.Start();
 		
-
+		// Make actors visible
+		pacman.Visible = true;
+		foreach (Ghost g in ghosts)
+		{
+			g.Visible = true;
+		}
 	}
 
 	// Add this method
@@ -980,6 +1047,59 @@ public partial class Game : Node2D
 		DisplayServer.MouseSetMode(DisplayServer.MouseMode.Visible);
 
 		GD.Print("Added simple control buttons");
+
+		// Manually load the instructions texture
+		try
+		{
+			 // Use the CORRECT path in both places
+			string texturePath = "res://Assets/Sprites/Regles2.png";
+			
+			// Try to preload the texture to ensure it's ready
+			ResourceLoader.LoadThreadedRequest(texturePath, "Texture2D");
+			OS.DelayMsec(100); // Small delay to help with loading
+			
+			instructionsTexture = GD.Load<Texture2D>(texturePath);
+			if (instructionsTexture != null) 
+			{
+				Vector2 size = instructionsTexture.GetSize();
+				GD.Print("Instructions texture loaded successfully - size: " + size);
+			} 
+			else 
+			{
+				GD.PrintErr("Failed to load instructions texture from path: " + texturePath);
+				// Try alternate path as fallback
+				instructionsTexture = GD.Load<Texture2D>("res://Assets/Regles2.png");
+				if (instructionsTexture != null)
+					GD.Print("Loaded from alternate path instead");
+			}
+		}
+		catch (Exception ex)
+		{
+			GD.PrintErr("Error loading instructions texture: " + ex.Message);
+		}
+
+		// Create the instructions trigger - after this time elapses, normal game start occurs
+		triggers.Add(instructionsStartedTrigger = new Trigger(Callable.From(() =>
+		{
+			GD.Print("Instructions timer finished");
+			
+			// Make sure we only unfreeze if still in instructions mode
+			if (IsFrozenBy(FreezeType.Instructions))
+			{
+				GD.Print("Transitioning from instructions to game start");
+				
+				// Make actors visible again
+				pacman.Visible = true;
+				foreach (Ghost g in ghosts)
+				{
+					g.Visible = true;
+				}
+				
+				// Clear instructions state and start game
+				UnFreezeBy(FreezeType.Instructions);
+				readyStartedTrigger.Start();
+			}
+		})));
 	}
 
 	// draw (for debug)
@@ -988,6 +1108,63 @@ public partial class Game : Node2D
 
 	public override void _Draw()
 	{
+		 // Check if we're in instructions mode FIRST
+		if (showSplashScreen && instructionsTexture != null)
+		{
+			 // Step 1: Get viewport size
+			Vector2 viewportSize = GetViewportRect().Size;
+			
+			// Step 2: Fill entire screen with black background
+			DrawRect(new Rect2(0, 0, viewportSize.X, viewportSize.Y), Colors.Black);
+			
+			// Step 3: Create a TextureRect that doesn't rely on our drawing code
+			TextureRect instructionsRect = new TextureRect();
+			instructionsRect.Texture = instructionsTexture;
+			instructionsRect.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+			instructionsRect.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+			instructionsRect.ExpandMode = TextureRect.ExpandModeEnum.FitWidth;
+			instructionsRect.StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered;
+			instructionsRect.Size = viewportSize;
+			AddChild(instructionsRect);
+			
+			// Step 4: Add a timer to remove this when needed
+			Timer cleanupTimer = new Timer();
+			cleanupTimer.OneShot = true;
+			cleanupTimer.WaitTime = 0.01;
+			cleanupTimer.Timeout += () => {
+				QueueRedraw(); // Force a redraw
+				
+				// Add prompt text over the image
+				Label promptLabel = new Label();
+				promptLabel.Text = "Tap or Press Any Key to Start";
+				promptLabel.HorizontalAlignment = HorizontalAlignment.Center;
+				promptLabel.Position = new Vector2(viewportSize.X / 2 - 100, viewportSize.Y - 50);
+				AddChild(promptLabel);
+			};
+			AddChild(cleanupTimer);
+			cleanupTimer.Start();
+			
+			// Step 5: Replace EndSplashScreen to clean up our elements
+			GetTree().CreateTimer(0.1).Timeout += () => {
+				EndSplashScreenDelegate = () => {
+					if (instructionsRect != null && IsInstanceValid(instructionsRect))
+						instructionsRect.QueueFree();
+					
+					var promptLabel = GetNode<Label>("Label");
+					if (promptLabel != null && IsInstanceValid(promptLabel))
+						promptLabel.QueueFree();
+						
+					showSplashScreen = false;
+					readyStartedTrigger.Start();
+					pacman.Visible = true;
+					foreach (Ghost g in ghosts)
+						g.Visible = true;
+				};
+			};
+			
+			return;
+		}
+
 		// draw ghost paths
 
 		// DrawGhostsPaths();
@@ -1126,12 +1303,67 @@ public partial class Game : Node2D
 			int fruitIndex = (int)GetFruitTypeFromLevel(level);
 			DrawTextureRectRegion(fruitTexture, new Rect2I(new Vector2I(100, 132), new Vector2I(24, 16)), new Rect2I(new Vector2I(24, fruitIndex * 16), new Vector2I(24, 16)));
 		}
+
+		// Draw instructions if in instructions state
+		if (IsFrozenBy(FreezeType.Instructions) && instructionsTexture != null)
+		{
+			// Get the viewport size to center the image
+			Vector2 viewportSize = GetViewportRect().Size;
+			Vector2 textureSize = instructionsTexture.GetSize();
+			
+			// Scale factor to fit the screen while maintaining aspect ratio
+			float scaleFactor = Math.Min(
+				viewportSize.X / textureSize.X,
+				viewportSize.Y / textureSize.Y
+			) * 0.9f;  // Scale to 90% of available space
+			
+			// Handle extremely large textures
+			if (textureSize.X > 2000 || textureSize.Y > 2000)
+			{
+				// For very large textures, use a more aggressive scaling
+				scaleFactor *= 0.5f;
+				GD.Print("Large texture detected - using reduced scale: " + scaleFactor);
+			}
+			
+			// Calculate centered position
+			Vector2 position = new Vector2(
+				(viewportSize.X - (textureSize.X * scaleFactor)) / 2,
+				(viewportSize.Y - (textureSize.Y * scaleFactor)) / 2
+			);
+			
+			// Draw the texture with scaling
+			DrawTextureRectRegion(
+				instructionsTexture,
+				new Rect2(position, textureSize * scaleFactor),
+				new Rect2(0, 0, textureSize.X, textureSize.Y)
+			);
+			
+			// Optional: Make sure the instruction text is visible against the background
+			DrawString(
+				ThemeDB.FallbackFont,
+				new Vector2(viewportSize.X / 2, viewportSize.Y - 30),
+				"Press any key to start",
+				HorizontalAlignment.Center,
+				-1,
+				16,
+				Colors.White
+			);
+		}
 	}
 
 	// runs at 60 fps
 
 	public override void _PhysicsProcess(double delta)
 	{
+		 // IMPORTANT: Skip normal game processing when showing splash screen
+		if (showSplashScreen)
+		{
+			// Only increment timer and force redraw
+			splashScreenTimer += (float)delta;
+			QueueRedraw();
+			return; // Skip all other processing
+		}
+		
 		// toggle fullscreen
 
 		if (Input.IsActionJustPressed("ToggleFullscreen"))
@@ -1213,14 +1445,83 @@ public partial class Game : Node2D
 		// increment number of ticks
 
 		ticks++;
+		
+		// Add this inside _PhysicsProcess right after ticks++
+		if (IsFrozenBy(FreezeType.Instructions))
+		{
+			// Add this line to debug EVERY frame
+			if (ticks % 30 == 0) // Log every half second
+			{
+				GD.Print($"Frame {ticks}: Still in instructions mode, freeze={freeze}, texture exists={instructionsTexture != null}");
+			}
+		}
 	}
 	public Vector2 LatestMousePos { get; private set; }
 
+	// Replace _Process with this version
 	public override void _Process(double delta)
 	{
-		// Use get_global_mouse_position() or get_viewport().get_mouse_position()
-		// depending on your scene setup.
+		// Handle splash screen logic
+		if (showSplashScreen)
+		{
+			splashScreenTimer += (float)delta;
+			
+			// Force redraw every frame to ensure splash screen is visible
+			QueueRedraw();
+			
+			// Only handle input to skip splash screen
+			return;
+		}
+		
+		// Normal game processing (your existing code)
 		LatestMousePos = DisplayServer.MouseGetPosition();
 	}
 
+	// Replace _Input with this version
+	public override void _Input(InputEvent @event)
+	{
+		// First handle splash screen skip
+		if (showSplashScreen)
+		{
+			if (@event is InputEventMouseButton mouseEvent && mouseEvent.Pressed ||
+				@event is InputEventKey keyEvent && keyEvent.Pressed ||
+				@event is InputEventScreenTouch touchEvent && touchEvent.Pressed)
+			{
+				GD.Print("Input received - ending splash screen");
+				EndSplashScreen();
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+		
+		// Handle game input (your existing code)
+		if (IsFrozenBy(FreezeType.Instructions))
+		{
+			// This code won't be needed anymore
+		}
+	}
+
+	// Add this helper method
+	private void EndSplashScreen()
+	{
+		GD.Print("Ending splash screen NOW");
+		
+		showSplashScreen = false;
+		
+		// Start the game directly
+		readyStartedTrigger.Start();
+		
+		// Make actors visible
+		pacman.Visible = true;
+		foreach (Ghost g in ghosts)
+		{
+			g.Visible = true;
+		}
+		
+		// Force a redraw
+		QueueRedraw();
+	}
+
+	// Add this delegate outside any method at class level
+	private Action EndSplashScreenDelegate;
 }
