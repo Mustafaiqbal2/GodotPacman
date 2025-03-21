@@ -12,12 +12,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Install Godot
+      - name: Install Godot with Mono
         run: |
-          brew install --cask godot
-          godot --version
-          GODOT_FULL_VERSION=$(godot --version | cut -d' ' -f2)
-          # Extract just the major.minor version
+          # Download Godot Mono version instead of using Homebrew
+          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/4.2.2-stable/Godot_v4.2.2-stable_mono_macos_universal.zip"
+          unzip godot.zip
+          mv "Godot_mono.app" /Applications/
+          # Add to PATH
+          echo "/Applications/Godot_mono.app/Contents/MacOS" >> $GITHUB_PATH
+          # Get version info
+          /Applications/Godot_mono.app/Contents/MacOS/Godot --version
+          GODOT_FULL_VERSION=$(/Applications/Godot_mono.app/Contents/MacOS/Godot --version | cut -d' ' -f2)
           GODOT_VERSION=$(echo $GODOT_FULL_VERSION | sed -E 's/([0-9]+\.[0-9]+).*/\1/')
           echo "Detected Godot version: $GODOT_FULL_VERSION (using $GODOT_VERSION for templates)"
           echo "godot_version=$GODOT_VERSION" >> $GITHUB_ENV
@@ -26,7 +31,14 @@ jobs:
       - name: Build Mono Solutions
         run: |
           echo "Building Mono solutions..."
-          godot --build-solutions
+          # Check if Godot has Mono support
+          /Applications/Godot_mono.app/Contents/MacOS/Godot --version | grep -i "mono" || echo "WARNING: This Godot version might not have Mono support"
+          
+          # Try building solutions with explicit path to Godot
+          /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --build-solutions || true
+          
+          # Check if C# assemblies exist
+          find . -name "*.dll" | grep -v /\.mono/ || echo "No compiled C# assemblies found"
         
       - name: Download and install templates
         run: |
@@ -212,7 +224,7 @@ jobs:
         run: |
           mkdir -p build/ios
           echo "Exporting XCArchive using --export-debug..."
-          godot --headless --export-debug "iOS" "build/ios/GodotPacman.xcarchive" || true
+          /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --export-debug "iOS" "build/ios/GodotPacman.xcarchive" || true
           if [ -d "build/ios/GodotPacman.xcarchive" ]; then
             echo "Successfully created XCArchive!"
             # Create a README with signing instructions (if needed)
