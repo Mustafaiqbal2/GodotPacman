@@ -23,6 +23,16 @@ jobs:
           echo "Detected Godot version: $GODOT_FULL_VERSION (using $GODOT_VERSION for templates)"
           echo "godot_version=$GODOT_VERSION" >> $GITHUB_ENV
           echo "godot_full_version=$GODOT_FULL_VERSION" >> $GITHUB_ENV
+      - name: Extract WAV files from ZIP archives
+        run: |
+          echo "Extracting WAV files from ZIP archives..."
+          cd Assets/Sounds
+          unzip -o "Arcade - Pac-Man - Sound Effects.zip" "*.wav" || true
+          unzip -o "Arcade - Ms Pac-Man - Sound Effects.zip" "*.wav" || true
+          cd ../..
+          
+          # Check if we have WAV files now
+          find . -name "*.wav" || echo "Still no WAV files found"
 
       - name: Import sound files manually
         run: |
