@@ -60,54 +60,54 @@ jobs:
         run: |
           if [ ! -f export_presets.cfg ]; then
             echo "Creating minimal export_presets.cfg for iOS"
-            cat > export_presets.cfg << EOL
-[preset.0]
-
-name="iOS"
-platform="iOS"
-runnable=true
-dedicated_server=false
-custom_features=""
-export_filter="all_resources"
-include_filter=""
-exclude_filter=""
-export_path="build/ios/GodotPacman.ipa"
-encryption_include_filters=""
-encryption_exclude_filters=""
-encrypt_pck=false
-encrypt_directory=false
-
-[preset.0.options]
-
-custom_template/debug=""
-custom_template/release=""
-application/app_store_team_id=""
-application/provisioning_profile_uuid_debug=""
-application/code_sign_identity_debug="iPhone Developer"
-application/export_method_debug=0
-application/provisioning_profile_uuid_release=""
-application/code_sign_identity_release="iPhone Distribution"
-application/export_method_release=0
-application/targeted_device_family=2
-application/bundle_identifier="com.yourusername.godotpacman"
-application/signature=""
-application/short_version="1.0"
-application/version="1.0"
-application/icon_76x76=""
-application/icon_152x152=""
-application/icon_1024x1024=""
-capabilities/access_wifi=false
-capabilities/push_notifications=false
-user_data/accessible_from_files_app=false
-user_data/accessible_from_itunes_sharing=false
-privacy/camera_usage_description=""
-privacy/microphone_usage_description=""
-privacy/photolibrary_usage_description=""
-orientation/portrait=true
-orientation/landscape_left=false
-orientation/landscape_right=false
-orientation/portrait_upside_down=false
-EOL
+            cat > export_presets.cfg << 'EOF'
+          [preset.0]
+          
+          name="iOS"
+          platform="iOS"
+          runnable=true
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path="build/ios/GodotPacman.ipa"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+          
+          [preset.0.options]
+          
+          custom_template/debug=""
+          custom_template/release=""
+          application/app_store_team_id=""
+          application/provisioning_profile_uuid_debug=""
+          application/code_sign_identity_debug="iPhone Developer"
+          application/export_method_debug=0
+          application/provisioning_profile_uuid_release=""
+          application/code_sign_identity_release="iPhone Distribution"
+          application/export_method_release=0
+          application/targeted_device_family=2
+          application/bundle_identifier="com.yourusername.godotpacman"
+          application/signature=""
+          application/short_version="1.0"
+          application/version="1.0"
+          application/icon_76x76=""
+          application/icon_152x152=""
+          application/icon_1024x1024=""
+          capabilities/access_wifi=false
+          capabilities/push_notifications=false
+          user_data/accessible_from_files_app=false
+          user_data/accessible_from_itunes_sharing=false
+          privacy/camera_usage_description=""
+          privacy/microphone_usage_description=""
+          privacy/photolibrary_usage_description=""
+          orientation/portrait=true
+          orientation/landscape_left=false
+          orientation/landscape_right=false
+          orientation/portrait_upside_down=false
+          EOF
             echo "Created export_presets.cfg file"
           else
             echo "export_presets.cfg already exists"
