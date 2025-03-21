@@ -10,31 +10,46 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          lfs: true  # Add this if you use Git LFS
+        uses: actions/checkout@v4
+        
+      - name: Get Godot version
+        id: godot-version
+        run: |
+          # Extract Godot version from project.godot file
+          GODOT_VERSION=$(grep "config/features=" project.godot | grep -o '[0-9]\+\.[0-9]\+' || echo "4.2")
+          echo "Detected Godot version: $GODOT_VERSION"
+          echo "godot_version=$GODOT_VERSION" >> $GITHUB_OUTPUT
         
       - name: Install Godot
         run: |
           brew install --cask godot
+          godot --version
+          
+      - name: Setup export templates
+        run: |
+          TEMPLATES_DIR=~/.local/share/godot/export_templates
+          mkdir -p $TEMPLATES_DIR
+          GODOT_VERSION=$(godot --version | cut -d' ' -f2)
+          echo "Godot version: $GODOT_VERSION"
+          
+          # Download and install export templates
+          curl -L https://downloads.tuxfamily.org/godotengine/${GODOT_VERSION}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz -o templates.tpz
+          unzip -o templates.tpz -d .
+          mkdir -p "$TEMPLATES_DIR/${GODOT_VERSION}.stable"
+          cp -r templates/* "$TEMPLATES_DIR/${GODOT_VERSION}.stable/"
+          ls -la "$TEMPLATES_DIR/${GODOT_VERSION}.stable/"
           
       - name: Export iOS project
         run: |
           mkdir -p build/ios
-          godot --headless --export "iOS" "build/ios/GodotPacman.xcarchive" --export-debug
+          godot --headless --export-debug "iOS" "build/ios/GodotPacman.ipa"
           
-      - name: Create IPA structure 
+      - name: List exported files
         run: |
-          cd build/ios
-          mkdir -p Payload
-          cp -r GodotPacman.xcarchive/Products/Applications/GodotPacman.app Payload/
-          zip -r GodotPacman.zip Payload
-          mv GodotPacman.zip GodotPacman.ipa
+          ls -la build/ios
           
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # Updated to v4
         with:
           name: ios-build
-          path: |
-            build/ios/GodotPacman.xcarchive
-            build/ios/GodotPacman.ipa
+          path: build/ios
