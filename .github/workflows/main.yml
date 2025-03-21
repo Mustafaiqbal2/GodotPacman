@@ -14,136 +14,52 @@ jobs:
         
       - name: Install Godot with Mono
         run: |
-          # Try multiple ways to get Godot with Mono
-          echo "Attempting to download Godot Mono..."
-          
-          # Try direct download first with retry logic
-          DOWNLOAD_ATTEMPTS=0
-          MAX_ATTEMPTS=3
-          SUCCESS=false
-          
-          while [ $DOWNLOAD_ATTEMPTS -lt $MAX_ATTEMPTS ] && [ "$SUCCESS" = false ]; do
-            DOWNLOAD_ATTEMPTS=$((DOWNLOAD_ATTEMPTS+1))
-            echo "Download attempt $DOWNLOAD_ATTEMPTS of $MAX_ATTEMPTS"
-            
-            curl -L --connect-timeout 30 --retry 5 --retry-delay 10 \
-              -o godot.zip \
-              "https://github.com/godotengine/godot/releases/download/4.2.2-stable/Godot_v4.2.2-stable_mono_macos_universal.zip"
-            
-            # Verify the download was successful
-            if [ -f godot.zip ] && [ $(stat -f%z godot.zip) -gt 1000000 ]; then
-              echo "Download appears successful, verifying ZIP integrity..."
-              if unzip -t godot.zip > /dev/null 2>&1; then
-                echo "ZIP file is valid!"
-                SUCCESS=true
-              else
-                echo "ZIP file is corrupted, retrying download..."
-                rm godot.zip
-              fi
-            else
-              echo "Download failed or file too small, retrying..."
-              rm -f godot.zip
-            fi
-            
-            # Add a delay before retry
-            if [ "$SUCCESS" = false ] && [ $DOWNLOAD_ATTEMPTS -lt $MAX_ATTEMPTS ]; then
-              sleep 10
-            fi
-          done
-          
-          # If direct download failed, try Homebrew as fallback
-          if [ "$SUCCESS" = false ]; then
-            echo "Direct download failed after $MAX_ATTEMPTS attempts."
-            echo "Falling back to Homebrew installation..."
-            brew install --cask godot-mono
-            
-            if [ -d "/Applications/Godot_mono.app" ]; then
-              echo "Godot Mono installed via Homebrew"
-              SUCCESS=true
-            else
-              echo "Homebrew installation failed too. Looking for existing Godot installation..."
-              
-              if [ -d "/Applications/Godot.app" ]; then
-                echo "Found standard Godot installation, will use this but C# support may be limited"
-                # Try to get a symlink to the standard version
-                ln -s /Applications/Godot.app /Applications/Godot_mono.app
-                SUCCESS=true
-              fi
-            fi
-          else
-            # Install from the successfully downloaded ZIP
-            echo "Extracting Godot Mono from ZIP..."
-            unzip -o godot.zip
-            
-            # Move it to Applications and add to PATH
-            if [ -d "Godot_mono.app" ]; then
-              mv "Godot_mono.app" /Applications/
-              echo "Moved Godot_mono.app to /Applications/"
-            else
-              # Look for alternative directory structure
-              find . -name "*.app" -type d | head -1 | xargs -I{} mv {} /Applications/Godot_mono.app
-              echo "Moved found .app to /Applications/Godot_mono.app"
-            fi
-          fi
-          
-          # Add to PATH and get version info
-          echo "/Applications/Godot_mono.app/Contents/MacOS" >> $GITHUB_PATH
-          
+          echo "Installing Godot Mono via Homebrew..."
+          brew install --cask godot-mono
           # Verify installation
-          if [ -f "/Applications/Godot_mono.app/Contents/MacOS/Godot" ]; then
-            echo "Godot executable exists at expected path"
-            echo "Getting version info..."
-            /Applications/Godot_mono.app/Contents/MacOS/Godot --version || echo "Version command failed but continuing"
-            
-            # Even if version command fails, try to set environment variables
-            GODOT_VERSION="4.2"
-            GODOT_FULL_VERSION="4.2.2"
-            echo "Assuming Godot version: $GODOT_FULL_VERSION (using $GODOT_VERSION for templates)"
-            echo "godot_version=$GODOT_VERSION" >> $GITHUB_ENV
-            echo "godot_full_version=$GODOT_FULL_VERSION" >> $GITHUB_ENV
-          else
-            echo "ERROR: Godot executable not found at expected path"
-            echo "Listing Applications directory content:"
-            ls -la /Applications/
-            exit 1
-          fi
+          godot-mono --version
+          GODOT_FULL_VERSION=$(godot-mono --version | cut -d' ' -f2)
+          GODOT_VERSION=$(echo $GODOT_FULL_VERSION | sed -E 's/([0-9]+\.[0-9]+).*/\1/')
+          echo "Detected Godot version: $GODOT_FULL_VERSION (using $GODOT_VERSION for templates)"
+          echo "godot_version=$GODOT_VERSION" >> $GITHUB_ENV
+          echo "godot_full_version=$GODOT_FULL_VERSION" >> $GITHUB_ENV
 
-          - name: Import project resources
-          run: |
-            echo "Importing project resources..."
-            # Create .godot directory first if it doesn't exist
-            mkdir -p .godot
-            
-            # Run Godot to scan and import resources
-            /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --editor --quit --accept-md5-signatures
-            
-            # Alternative import command if the above fails
-            if [ ! -d ".godot/imported" ] && [ ! -d ".import" ]; then
-              echo "First import attempt failed, trying alternative method..."
-              /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --export-pack --accept-md5-signatures --tests-exit
-            fi
-            
-            # Check if import directories were created
-            if [ -d ".godot/imported" ] || [ -d ".import" ]; then
-              echo "Resources imported successfully"
-              # List some imported files for verification
-              find .godot/imported -type f 2>/dev/null | head -n 5 || true
-              find .import -type f 2>/dev/null | head -n 5 || true
-            else
-              echo "Warning: Import directories not found"
-              # Create placeholder directories to avoid further errors
-              mkdir -p .godot/imported
-              mkdir -p .import
-            fi
+      - name: Import project resources
+        run: |
+          echo "Importing project resources..."
+          # Create .godot directory first if it doesn't exist
+          mkdir -p .godot
+          
+          # Run Godot to scan and import resources
+          godot-mono --headless --editor --quit --accept-md5-signatures || true
+          
+          # Alternative import command if the above fails
+          if [ ! -d ".godot/imported" ] && [ ! -d ".import" ]; then
+            echo "First import attempt failed, trying alternative method..."
+            godot-mono --headless --export-pack --accept-md5-signatures --tests-exit || true
+          fi
+          
+          # Check if import directories were created
+          if [ -d ".godot/imported" ] || [ -d ".import" ]; then
+            echo "Resources imported successfully"
+            # List some imported files for verification
+            find .godot/imported -type f 2>/dev/null | head -n 5 || true
+            find .import -type f 2>/dev/null | head -n 5 || true
+          else
+            echo "Warning: Import directories not found"
+            # Create placeholder directories to avoid further errors
+            mkdir -p .godot/imported
+            mkdir -p .import
+          fi
 
       - name: Build Mono Solutions
         run: |
           echo "Building Mono solutions..."
           # Check if Godot has Mono support
-          /Applications/Godot_mono.app/Contents/MacOS/Godot --version | grep -i "mono" || echo "WARNING: This Godot version might not have Mono support"
+          godot-mono --version | grep -i "mono" || echo "WARNING: This Godot version might not have Mono support"
           
-          # Try building solutions with explicit path to Godot
-          /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --build-solutions || true
+          # Try building solutions
+          godot-mono --headless --build-solutions || true
           
           # Check if C# assemblies exist
           find . -name "*.dll" | grep -v /\.mono/ || echo "No compiled C# assemblies found"
@@ -228,7 +144,7 @@ jobs:
               cp -f *.tpz "$DIR/" 2>/dev/null || true
             done
             
-            # Create symlinks between different template directories for good measure
+            # List directory contents
             for DIR in "${TEMPLATE_DIRS[@]}"; do
               DIR=$(eval echo "$DIR")
               if [ -d "$DIR" ]; then
@@ -329,7 +245,7 @@ jobs:
       - name: Godot export debug info
         run: |
           echo "Installed Godot version:"
-          godot --version
+          godot-mono --version
           
           echo "Looking for template locations:"
           find ~ -name "export_templates" -type d | xargs ls -la || true
@@ -350,12 +266,12 @@ jobs:
           
           # Try with explicit path and export-debug
           echo "Trying export-debug..."
-          /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --export-debug "iOS" "build/ios/GodotPacman.xcarchive" && export_success=true
+          godot-mono --headless --export-debug "iOS" "build/ios/GodotPacman.xcarchive" && export_success=true
           
           # If that failed, try with plain export
           if [ "$export_success" = false ]; then
             echo "export-debug failed, trying with plain export..."
-            /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --export "iOS" "build/ios/GodotPacman.xcarchive" && export_success=true
+            godot-mono --headless --export "iOS" "build/ios/GodotPacman.xcarchive" && export_success=true
           fi
           
           # If still failed, try finding a different Godot executable
@@ -370,7 +286,7 @@ jobs:
           if [ -d "build/ios/GodotPacman.xcarchive" ]; then
             echo "Successfully created XCArchive!"
             # Create a README with signing instructions
-            cat > build/ios/SIGNING_INSTRUCTIONS.txt << 'EOF'
+            cat > build/ios/SIGNING_INSTRUCTIONS.txt << EOF
             iOS Export - Signing Instructions
 
             This archive contains both an XCArchive and an unsigned IPA.
@@ -389,6 +305,18 @@ jobs:
             # Create a placeholder directory
             mkdir -p build/ios/GodotPacman.xcarchive
             echo "Export failed. See logs for details." > build/ios/GodotPacman.xcarchive/README.txt
+          fi
+          
+      - name: Export PCK as fallback
+        run: |
+          echo "Creating PCK export as fallback..."
+          mkdir -p build/ios
+          godot-mono --headless --export-pack "iOS" "build/ios/GodotPacman.pck" || true
+          
+          if [ -f "build/ios/GodotPacman.pck" ]; then
+            echo "PCK export succeeded!"
+            # Copy project files to allow for manual reconstruction
+            cp -r project.godot export_presets.cfg build/ios/ || true
           fi
           
       - name: Generate IPA from XCArchive
@@ -446,7 +374,7 @@ jobs:
           echo "Export directory contents:"
           ls -la build/ios || echo "No files found in build/ios"
           
-          if [ ! -f "build/ios/GodotPacman.ipa" ] && [ ! -d "build/ios/GodotPacman.xcarchive" ]; then
+          if [ ! -f "build/ios/GodotPacman.ipa" ] && [ ! -d "build/ios/GodotPacman.xcarchive" ] && [ ! -f "build/ios/GodotPacman.pck" ]; then
             echo "No export files were created. Creating a placeholder file for artifact upload."
             mkdir -p build/ios
             echo "Export failed. Please check the logs for details." > build/ios/export_failed.txt
