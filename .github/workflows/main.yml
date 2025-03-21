@@ -1,0 +1,45 @@
+name: Export iOS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+          
+      - name: Install Godot
+        run: |
+          brew install --cask godot
+          
+      - name: Setup iOS certificates
+        uses: apple-actions/import-codesigning-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATES_BASE64 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATES_PASSWORD }}
+          
+      - name: Setup provisioning profile
+        uses: apple-actions/download-provisioning-profiles@v1
+        with:
+          bundle-id: 'com.yourusername.godotpacman'
+          profile-type: 'IOS_APP_STORE'
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          
+      - name: Export iOS project
+        run: |
+          mkdir -p build/ios
+          godot --headless --export-debug "iOS" "build/ios/GodotPacman.ipa"
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-build
+          path: build/ios
