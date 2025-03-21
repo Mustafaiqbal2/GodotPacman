@@ -72,6 +72,7 @@ yarn-error.log*
 # Debug symbols
 *.pdb
 
+ios.md
 
 # APK files
 *.apk
