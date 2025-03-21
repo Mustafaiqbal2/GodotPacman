@@ -23,20 +23,31 @@ jobs:
           echo "godot_version=$GODOT_VERSION" >> $GITHUB_ENV
           echo "godot_full_version=$GODOT_FULL_VERSION" >> $GITHUB_ENV
         
-      - name: Download templates for Godot 4.x
+      - name: Download and install templates
         run: |
-          TEMPLATES_DIR=~/.local/share/godot/export_templates
-          mkdir -p $TEMPLATES_DIR
+          # Define all possible template directories
+          TEMPLATE_DIRS=(
+            "~/.local/share/godot/export_templates/${godot_version}.stable"
+            "~/Library/Application Support/Godot/export_templates/${godot_version}.stable"
+            "~/Library/Application Support/Godot/export_templates/${godot_full_version}"
+          )
+          
+          # Create all template directories
+          for DIR in "${TEMPLATE_DIRS[@]}"; do
+            DIR=$(eval echo "$DIR")
+            echo "Creating template directory: $DIR"
+            mkdir -p "$DIR"
+          done
           
           # Try multiple template sources and formats
           TEMPLATE_URLS=(
             "https://github.com/godotengine/godot/releases/download/${godot_version}-stable/Godot_v${godot_version}-stable_export_templates.tpz"
             "https://github.com/godotengine/godot/releases/download/${godot_version}.0-stable/Godot_v${godot_version}.0-stable_export_templates.tpz"
-            "https://github.com/godotengine/godot/releases/download/${godot_version}.1-stable/Godot_v${godot_version}.1-stable_export_templates.tpz"
             "https://downloads.tuxfamily.org/godotengine/${godot_version}/Godot_v${godot_version}-stable_export_templates.tpz"
-            "https://downloads.tuxfamily.org/godotengine/${godot_version}/Godot_v${godot_version}.0-stable_export_templates.tpz"
+            "https://github.com/godotengine/godot-builds/releases/download/4.2.2-stable/Godot_v4.2.2-stable_export_templates.tpz"
           )
           
+          # Try downloading templates
           for URL in "${TEMPLATE_URLS[@]}"; do
             echo "Trying to download templates from: $URL"
             if curl -L --connect-timeout 30 --retry 3 --retry-delay 5 "$URL" -o templates.tpz; then
@@ -53,32 +64,67 @@ jobs:
             fi
           done
           
-          # Check if we have a valid template file
-          if [ ! -f templates.tpz ] || ! unzip -t templates.tpz > /dev/null 2>&1; then
-            echo "All download attempts failed. Trying direct download for version 4.x."
-            # Direct download for Godot 4.x
-            curl -L --connect-timeout 30 --retry 3 --retry-delay 5 "https://github.com/godotengine/godot-builds/releases/download/4.2.2-stable/Godot_v4.2.2-stable_export_templates.tpz" -o templates.tpz
-          fi
-          
           # Final check and installation
           if [ -f templates.tpz ] && unzip -t templates.tpz > /dev/null 2>&1; then
             echo "Installing templates..."
             unzip -o templates.tpz -d .
             
-            # Create version-specific directory
-            TARGET_DIR="$TEMPLATES_DIR/${godot_version}.stable"
-            mkdir -p "$TARGET_DIR"
+            # Copy templates to all possible locations
+            for DIR in "${TEMPLATE_DIRS[@]}"; do
+              DIR=$(eval echo "$DIR")
+              echo "Installing templates to: $DIR"
+              
+              # Copy from templates directory if it exists
+              if [ -d "templates" ]; then
+                cp -r templates/* "$DIR/"
+                
+                # Directly extract ios.zip from templates if needed
+                if [ -f "templates/ios.zip" ]; then
+                  echo "Found ios.zip in templates directory"
+                  cp templates/ios.zip "$DIR/"
+                fi
+              fi
+              
+              # Also copy loose files in case templates directory doesn't exist
+              cp -f *.zip "$DIR/" 2>/dev/null || true
+              cp -f *.tpz "$DIR/" 2>/dev/null || true
+            done
             
-            # Copy templates to the correct location
-            if [ -d "templates" ]; then
-              cp -r templates/* "$TARGET_DIR/"
-            else
-              # Some templates unzip directly without a templates/ subdirectory
-              cp -r *.{zip,tpz} "$TARGET_DIR/" 2>/dev/null || true
+            # Create symlinks between different template directories for good measure
+            for DIR in "${TEMPLATE_DIRS[@]}"; do
+              DIR=$(eval echo "$DIR")
+              if [ -d "$DIR" ]; then
+                echo "Contents of $DIR:"
+                ls -la "$DIR/"
+              fi
+            done
+            
+            # Try to manually extract iOS templates if they're inside another zip
+            if [ -f "templates/ios.zip" ]; then
+              for DIR in "${TEMPLATE_DIRS[@]}"; do
+                DIR=$(eval echo "$DIR")
+                cp templates/ios.zip "$DIR/" || true
+              done
+            elif [ -f "templates.tpz" ]; then
+              echo "Extracting iOS template from templates.tpz"
+              mkdir -p temp_extract
+              unzip -j templates.tpz "*ios*" -d temp_extract || true
+              if [ -f "temp_extract/ios.zip" ]; then
+                for DIR in "${TEMPLATE_DIRS[@]}"; do
+                  DIR=$(eval echo "$DIR")
+                  cp temp_extract/ios.zip "$DIR/" || true
+                done
+              fi
+              rm -rf temp_extract
             fi
             
-            echo "Template installation complete. Contents:"
-            ls -la "$TARGET_DIR/"
+            # Debug - List all template directories
+            echo "Template directories contents:"
+            for DIR in "${TEMPLATE_DIRS[@]}"; do
+              DIR=$(eval echo "$DIR")
+              echo "Contents of $DIR:"
+              ls -la "$DIR/" || true
+            done
           else
             echo "Failed to obtain valid export templates after multiple attempts."
             exit 1
@@ -88,9 +134,9 @@ jobs:
         run: |
           if [ ! -f export_presets.cfg ]; then
             echo "Creating minimal export_presets.cfg for iOS"
-            cat > export_presets.cfg << 'EOF'
+            cat > export_presets.cfg << 'EOFMARKER'
           [preset.0]
-
+          
           name="iOS"
           platform="iOS"
           runnable=true
@@ -104,9 +150,9 @@ jobs:
           encryption_exclude_filters=""
           encrypt_pck=false
           encrypt_directory=false
-
+          
           [preset.0.options]
-
+          
           custom_template/debug=""
           custom_template/release=""
           application/app_store_team_id=""
@@ -135,27 +181,33 @@ jobs:
           orientation/landscape_left=false
           orientation/landscape_right=false
           orientation/portrait_upside_down=false
-          EOF
-                      echo "Created export_presets.cfg file"
-                    else
-                      echo "export_presets.cfg already exists"
-                    fi
-                    cat export_presets.cfg
+          EOFMARKER
+            echo "Created export_presets.cfg file"
+          else
+            echo "export_presets.cfg already exists"
+          fi
+          cat export_presets.cfg
           
       - name: Godot export debug info
         run: |
           echo "Installed Godot version:"
           godot --version
-          echo "Templates locations:"
-          ls -la ~/.local/share/godot/export_templates/ || true
-          echo "Godot editor settings:"
-          ls -la ~/.config/godot/ || true
+          
+          echo "Looking for template locations:"
+          find ~ -name "export_templates" -type d | xargs ls -la || true
+          
+          echo "Checking specific template paths:"
+          ls -la ~/.local/share/godot/export_templates/ 2>/dev/null || echo "Path not found"
+          ls -la ~/Library/Application\ Support/Godot/export_templates/ 2>/dev/null || echo "Path not found"
+          
           echo "Current directory content:"
           ls -la
           
       - name: Export iOS project
         run: |
           mkdir -p build/ios
+          
+          # Try multiple export commands
           echo "Trying export with debug flag..."
           godot --headless --export-debug "iOS" "build/ios/GodotPacman.ipa" || true
           
