@@ -108,6 +108,34 @@ jobs:
             exit 1
           fi
 
+          - name: Import project resources
+          run: |
+            echo "Importing project resources..."
+            # Create .godot directory first if it doesn't exist
+            mkdir -p .godot
+            
+            # Run Godot to scan and import resources
+            /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --editor --quit --accept-md5-signatures
+            
+            # Alternative import command if the above fails
+            if [ ! -d ".godot/imported" ] && [ ! -d ".import" ]; then
+              echo "First import attempt failed, trying alternative method..."
+              /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --export-pack --accept-md5-signatures --tests-exit
+            fi
+            
+            # Check if import directories were created
+            if [ -d ".godot/imported" ] || [ -d ".import" ]; then
+              echo "Resources imported successfully"
+              # List some imported files for verification
+              find .godot/imported -type f 2>/dev/null | head -n 5 || true
+              find .import -type f 2>/dev/null | head -n 5 || true
+            else
+              echo "Warning: Import directories not found"
+              # Create placeholder directories to avoid further errors
+              mkdir -p .godot/imported
+              mkdir -p .import
+            fi
+
       - name: Build Mono Solutions
         run: |
           echo "Building Mono solutions..."
@@ -430,31 +458,3 @@ jobs:
           name: ios-build
           path: build/ios
           retention-days: 14
-
-      - name: Import project resources
-        run: |
-          echo "Importing project resources..."
-          # Create .godot directory first if it doesn't exist
-          mkdir -p .godot
-          
-          # Run Godot to scan and import resources
-          /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --editor --quit --accept-md5-signatures
-          
-          # Alternative import command if the above fails
-          if [ ! -d ".godot/imported" ] && [ ! -d ".import" ]; then
-            echo "First import attempt failed, trying alternative method..."
-            /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --export-pack --accept-md5-signatures --tests-exit
-          fi
-          
-          # Check if import directories were created
-          if [ -d ".godot/imported" ] || [ -d ".import" ]; then
-            echo "Resources imported successfully"
-            # List some imported files for verification
-            find .godot/imported -type f 2>/dev/null | head -n 5 || true
-            find .import -type f 2>/dev/null | head -n 5 || true
-          else
-            echo "Warning: Import directories not found"
-            # Create placeholder directories to avoid further errors
-            mkdir -p .godot/imported
-            mkdir -p .import
-          fi
