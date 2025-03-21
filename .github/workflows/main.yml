@@ -93,8 +93,8 @@ jobs:
             # Verify
             ls -la ~/Library/Application\ Support/Godot/export_templates/4.4.stable.mono/
 
-            - name: Configure export presets for CI
-            run: |
+      - name: Configure export presets for CI
+        run: |
               echo "Modifying export_presets.cfg for minimal signing..."
               
               # Make backup
