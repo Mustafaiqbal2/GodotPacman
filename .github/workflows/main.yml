@@ -32,22 +32,7 @@ jobs:
           
           # Try building solutions
           godot-mono --headless --build-solutions || true
-          
-          # Check if C# assemblies exist
-          find . -name "*.dll" | grep -v /\.mono/ || echo "No compiled C# assemblies found"
-          
-          # If no C# assemblies, try configuring the project for non-C# export
-          if [ $(find . -name "*.dll" | grep -v /\.mono/ | wc -l) -eq 0 ]; then
-            echo "No C# assemblies found, configuring project for non-C# export"
-            # Create a simple project.godot addition that disables C# for export
-            if [ -f "project.godot" ]; then
-              # Make backup
-              cp project.godot project.godot.bak
-              # Add config to disable mono
-              echo -e "\n[mono]\n\nexport/include_scripts=false\n" >> project.godot
-              echo "Modified project.godot to disable mono for export"
-            fi
-          fi
+        
 
       - name: Download and install templates
         run: |
