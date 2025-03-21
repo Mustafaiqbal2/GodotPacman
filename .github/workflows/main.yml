@@ -25,33 +25,33 @@ jobs:
           echo "godot_full_version=$GODOT_FULL_VERSION" >> $GITHUB_ENV
       
 
-          - name: Prepare Godot project for building
-          run: |
-            echo "Preparing project for building..."
-            
-            # Create a modified project.godot that disables C# for export
-            cp project.godot project.godot.original
-            
-            # Add configuration to disable C# for export
-            cat >> project.godot << EOF
-        
+      - name: Prepare Godot project for building
+        run: |
+          echo "Preparing project for building..."
+          
+          # Create a modified project.godot that disables C# for export
+          cp project.godot project.godot.original
+          
+          # Add configuration to disable C# for export
+          cat >> project.godot << EOF
+      
           [mono]
           
           export/include_scripts=false
           EOF
-            
-            # Remove the .mono directory if it exists
-            rm -rf .mono
-            
-            # Create basic directories needed
-            mkdir -p .godot/mono/temp
-            mkdir -p .godot/imported
-            
-            # Create an empty .csproj.assets.json file to prevent Mono from trying to restore packages
-            mkdir -p .mono/temp/obj
-            echo "{}" > .mono/temp/obj/project.assets.json
-            
-            echo "Project prepared for building"
+          
+          # Remove the .mono directory if it exists
+          rm -rf .mono
+          
+          # Create basic directories needed
+          mkdir -p .godot/mono/temp
+          mkdir -p .godot/imported
+          
+          # Create an empty .csproj.assets.json file to prevent Mono from trying to restore packages
+          mkdir -p .mono/temp/obj
+          echo "{}" > .mono/temp/obj/project.assets.json
+          
+          echo "Project prepared for building"
 
       - name: Build Mono Solutions
         run: |
